@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Naash 3D Pack Viewer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500;1,700&family=Outfit:wght@400;500;600&display=swap">
+<style>
+/* Layout: a full-height 3D studio on the left, a control rail on the right; stacks on phones.
+   Color: maroon-led UI, blush accent in dark mode; the studio follows the theme. */
+:root {
+  --bg: #E9E5E3;
+  --panel: #FFFFFF;
+  --fg: #26151A;
+  --muted: #6B5A5E;
+  --line: #D8D0CE;
+  --accent: #7A1730;
+  --accent-fg: #FFFFFF;
+  --tint: #F3E4E7;
+  --stage-a: #D9D3CE;
+  --stage-b: #B9B1AB;
+  --chip: rgba(255,255,255,0.8);
+  --font-ui: 'Outfit', system-ui, sans-serif;
+  --font-display: 'Cinzel', Georgia, serif;
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #130F11; --panel: #1D1619; --fg: #F4E9E7; --muted: #BBA8AC; --line: #3A2D31;
+    --accent: #F2B5A5; --accent-fg: #2B0A16; --tint: #33202A; --stage-a: #3A2E33; --stage-b: #1A1215;
+    --chip: rgba(29,22,25,0.82); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #130F11; --panel: #1D1619; --fg: #F4E9E7; --muted: #BBA8AC; --line: #3A2D31;
+  --accent: #F2B5A5; --accent-fg: #2B0A16; --tint: #33202A; --stage-a: #3A2E33; --stage-b: #1A1215;
+  --chip: rgba(29,22,25,0.82); color-scheme: dark;
+}
+html { box-sizing: border-box; height: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+}
+#app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; }
+#stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 10px; background: var(--stage-b); touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+#stage canvas:active { cursor: grabbing; }
+.chip { position: absolute; background: var(--chip); color: var(--fg); font-size: 12px; letter-spacing: 0.04em; padding: 7px 12px; border-radius: 99px; backdrop-filter: blur(6px); }
+#hint { left: 14px; bottom: 14px; max-width: calc(100% - 200px); }
+#status { right: 14px; bottom: 14px; }
+#fallback { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 32px; color: var(--muted); }
+aside { min-width: 0; min-height: 0; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 20px; }
+.brand { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.22em; font-size: 15px; color: var(--accent); }
+h1 { margin: 6px 0 0; font-family: var(--font-serif); font-weight: 700; font-size: 32px; line-height: 1.05; text-wrap: balance; }
+.sub { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+h2 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.group { min-width: 0; }
+.designs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+button { font: inherit; color: var(--fg); background: transparent; border: 1.5px solid var(--line); border-radius: 8px; min-height: 44px; padding: 8px 12px; cursor: pointer; text-align: left; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { border-color: var(--accent); background: var(--tint); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.design { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+.sw { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,0.25); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.row button { flex: 1 1 0; text-align: center; font-size: 14px; font-weight: 500; }
+.primary { width: 100%; text-align: center; background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; font-size: 15px; }
+.primary:hover { filter: brightness(1.08); }
+.desc { margin: 0; font-size: 14px; line-height: 1.55; }
+.meta { margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; }
+.note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0; }
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  #app { height: auto; grid-template-columns: minmax(0, 1fr); }
+  #stage { height: 62vh; min-height: 380px; }
+  #hint { display: none; }
+  aside { overflow: visible; }
+}
+</style>
+
+</head>
+<body>
+<div id="app">
+  <div id="stage" role="img" aria-label="Interactive 3D view of Naash Coffee bags. Drag to rotate, scroll to zoom.">
+    <div id="fallback">Your browser could not start 3D graphics. Try another browser or turn on hardware acceleration.</div>
+    <div class="chip" id="hint">Drag to rotate · scroll or pinch to zoom · click a valve to smell</div>
+    <div class="chip" id="status" aria-live="polite">Loading fonts…</div>
+  </div>
+  <aside>
+    <div>
+      <div class="brand">NAASH COFFEE</div>
+      <h1>Pack viewer</h1>
+      <p class="sub">Six stand-up pouch designs in real-time 3D, with lit film, aroma valves and props on the table.</p>
+    </div>
+    <div class="group">
+      <h2>Show</h2>
+      <div class="row" id="modes">
+        <button type="button" data-mode="single" aria-pressed="true">One bag</button>
+        <button type="button" data-mode="lineup" aria-pressed="false">All six designs</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>Design</h2>
+      <div class="designs" id="designs"></div>
+    </div>
+    <div class="group">
+      <h2>Bag size</h2>
+      <div class="row" id="sizes">
+        <button type="button" data-size="250" aria-pressed="true">250 G</button>
+        <button type="button" data-size="1000" aria-pressed="false">1 KG</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>View</h2>
+      <div class="row">
+        <button type="button" data-view="front">Front</button>
+        <button type="button" data-view="back">Back</button>
+        <button type="button" data-view="side">Side</button>
+      </div>
+      <div class="row" style="margin-top: 8px">
+        <button type="button" id="auto" aria-pressed="true">Auto-rotate</button>
+      </div>
+    </div>
+    <button type="button" class="primary" id="smell">Squeeze &amp; smell</button>
+    <div class="group">
+      <h2 id="dname">A · Aroma Wheel</h2>
+      <p class="desc" id="ddesc"></p>
+      <dl class="meta" id="dmeta"></dl>
+    </div>
+    <p class="note">Origin names, grades and tasting notes are sample copy. Replace them with your own lots.</p>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- data ---------- */
+  var SIZES = { '250': { label: '250 G', s: 1 }, '1000': { label: '1 KG', s: 1.3 } };
+  var BASE = { w: 1.0, h: 1.55, d: 0.5 };  // stand-up pouch, 250 g
+  function dimsOf(size) { var s = SIZES[size].s; return { w: BASE.w * s, h: BASE.h * s, d: BASE.d * s }; }
+  var ORDER = ['A', 'B', 'C', 'D', 'E', 'F'];
+  var DESIGNS = {
+    A: { name: 'Aroma Wheel', origin: 'Nyeri', grade: 'AA · SL28 & SL34', notes: ['Citrus · Berry', 'Cacao'],
+      bg: ['#6B1220', '#470A14'], fg: '#F6E9DC', accent: '#F2B5A5', light: false, gloss: true, valveInk: '#F2B5A5',
+      desc: 'Maroon and blush. A wheel shows the flavor family. Squeeze at the valve to smell the beans.',
+      rows: [['Region', 'Nyeri, Kenya'], ['Variety', 'SL28, SL34'], ['Process', '[Washed?]'], ['Altitude', '[000] m']] },
+    B: { name: 'Contour', origin: 'Kiambu', grade: 'PB · Batian', notes: ['Plum · Cocoa nib', 'Orange peel'],
+      bg: ['#1D1B1C', '#1D1B1C'], fg: '#F1E6D2', accent: '#D18A5B', light: false, gloss: false, valveInk: '#D18A5B',
+      desc: 'Matte charcoal and copper. Mountain contours and four aroma bars show floral, fruity, sweet and nutty at a glance.',
+      rows: [['Region', 'Kiambu, Kenya'], ['Variety', 'Batian'], ['Process', '[Washed?]'], ['Altitude', '[000] m']] },
+    C: { name: 'Bold Cream', origin: 'Kirinyaga', grade: 'AB · SL28', notes: ['Red wine · Blackberry', 'Dark honey'],
+      bg: ['#F1E6D2', '#F1E6D2'], fg: '#5E101C', accent: '#B23A4A', light: true, gloss: false, valveInk: '#5E101C',
+      desc: 'A giant monogram and "Smell the difference." Four aroma icons and a maroon smell-here patch.',
+      rows: [['Region', 'Kirinyaga, Kenya'], ['Variety', 'SL28'], ['Process', '[Washed?]'], ['Altitude', '[000] m']] },
+    D: { name: 'Steam', origin: 'No. 1', grade: 'Naash house blend', notes: ['Red wine · Blackberry', 'Dark honey'],
+      bg: ['#2B0A16', '#8A1B33'], fg: '#FFE9E0', accent: '#FFB59A', light: false, gloss: true, valveInk: '#FFB59A',
+      desc: 'Plum to maroon with rising steam. A round aroma window shows the beans, and the valve sits above it.',
+      rows: [['Blend', 'Kenya highland lots'], ['Roast', 'Medium'], ['Process', '[Washed?]'], ['Altitude', '[000] m']] },
+    E: { name: 'Kraft Classic', origin: 'Nyeri', grade: 'AA · SL28 & SL34', notes: ['Blackcurrant · Grapefruit', 'Cane sugar'],
+      bg: ['#C9A06B', '#B98E5A'], fg: '#3A1A10', accent: '#7A1730', light: true, gloss: false, valveInk: '#3A1A10',
+      desc: 'Natural kraft paper with a maroon label, a monogram, four trust icons and a beans-and-cherries illustration.',
+      rows: [['Region', 'Nyeri, Kenya'], ['Variety', 'SL28, SL34'], ['Process', '[Washed?]'], ['Altitude', '[000] m']] },
+    F: { name: 'Highland Pattern', origin: 'Embu', grade: 'AA · SL28', notes: ['Honey · Orange blossom', 'Toasted almond'],
+      bg: ['#5E101C', '#3E0912'], fg: '#F6E9DC', accent: '#F2B5A5', light: false, gloss: false, valveInk: '#F2B5A5',
+      desc: 'Tone-on-tone mountain pattern wraps the bag, with a round badge holding the N monogram.',
+      rows: [['Region', 'Embu, Kenya'], ['Variety', 'SL28'], ['Process', '[Washed?]'], ['Altitude', '[000] m']] }
+  };
+  var state = { design: 'A', size: '250', mode: 'single' };
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- UI shell ---------- */
+  var designsEl = $('designs');
+  ORDER.forEach(function (k) {
+    var D = DESIGNS[k], b = document.createElement('button');
+    b.type = 'button'; b.className = 'design'; b.dataset.design = k;
+    b.setAttribute('aria-pressed', k === state.design ? 'true' : 'false');
+    var sw = document.createElement('span'); sw.className = 'sw';
+    sw.style.background = 'linear-gradient(135deg,' + D.bg[0] + ' 50%,' + D.accent + ' 50%)';
+    var t = document.createElement('span'); t.textContent = k + ' · ' + D.name;
+    b.appendChild(sw); b.appendChild(t); designsEl.appendChild(b);
+  });
+  function updateInfo() {
+    var D = DESIGNS[state.design];
+    $('dname').textContent = state.design + ' · ' + D.name;
+    $('ddesc').textContent = D.desc;
+    var dl = $('dmeta'); dl.textContent = '';
+    D.rows.concat([['Size', state.mode !== 'single' ? '250 G' : SIZES[state.size].label]]).forEach(function (r) {
+      var dt = document.createElement('dt'); dt.textContent = r[0];
+      var dd = document.createElement('dd'); dd.textContent = r[1]; dl.appendChild(dt); dl.appendChild(dd);
+    });
+  }
+  function pressed(container, el) { Array.prototype.forEach.call(container.children, function (x) { x.setAttribute('aria-pressed', x === el ? 'true' : 'false'); }); }
+
+  /* ---------- three.js setup ---------- */
+  var stage = $('stage'), renderer, scene, camera, controls, ground;
+  var records = [], sprites = [], tween = null, props = null, beanMeshes = [], hits = [];
+  try {
+    if (typeof THREE === 'undefined' || !THREE.OrbitControls) throw new Error('three.js unavailable');
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    stage.insertBefore(renderer.domElement, stage.firstChild);
+  } catch (e) { $('fallback').style.display = 'flex'; $('hint').hidden = true; $('status').hidden = true; return; }
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xaaaaaa, 12, 30);
+  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 80);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
+  controls.minDistance = 2.6; controls.maxDistance = 14; controls.maxPolarAngle = Math.PI * 0.52;
+  controls.autoRotate = true; controls.autoRotateSpeed = 1.3;
+
+  // studio softbox environment for reflections
+  (function () {
+    var pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene();
+    es.background = new THREE.Color(0x2a2425);
+    function panel(w, h, x, y, z, k) {
+      var m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k * 0.97, k * 0.93), side: THREE.DoubleSide, toneMapped: false }));
+      m.position.set(x, y, z); m.lookAt(0, 0, 0); es.add(m);
+    }
+    panel(7, 4, 4, 6, 5, 7); panel(5, 3, -7, 3, 3, 3.2); panel(10, 2, 0, 7, -5, 4.5); panel(12, 1.2, 0, 0.8, 9, 1.6); panel(3, 6, 8, 2, -3, 2.4);
+    scene.environment = pm.fromScene(es, 0.035).texture; pm.dispose();
+  })();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x9a8a80, 0.25));
+  var key = new THREE.DirectionalLight(0xfff4e8, 1.05);
+  key.position.set(3.5, 6.5, 4.5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.left = -7; key.shadow.camera.right = 7; key.shadow.camera.top = 6; key.shadow.camera.bottom = -4;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 24; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+  scene.add(key);
+  var rim = new THREE.DirectionalLight(0xffffff, 0.5); rim.position.set(-2, 3, -5); scene.add(rim);
+
+  // table surface with fine grain
+  function noiseTex(size, speck, base, rep) {
+    var c = document.createElement('canvas'); c.width = c.height = size; var g = c.getContext('2d');
+    g.fillStyle = base; g.fillRect(0, 0, size, size);
+    var seed = 11; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    for (var i = 0; i < speck; i++) { var v = rnd() > 0.5 ? 255 : 0; g.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',' + (0.03 + rnd() * 0.05) + ')'; g.fillRect(rnd() * size, rnd() * size, 1 + rnd() * 3, 1 + rnd() * 3); }
+    var t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t;
+  }
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ map: noiseTex(512, 9000, '#ffffff', 26), roughness: 0.92, metalness: 0 }));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function applyTheme() {
+    var a = cssVar('--stage-a') || '#D9D3CE', b = cssVar('--stage-b') || '#B9B1AB';
+    scene.background = new THREE.Color(b).convertSRGBToLinear();
+    scene.fog.color.copy(scene.background);
+    ground.material.color.set(a).convertSRGBToLinear();
+  }
+  applyTheme();
+  try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch (e) {}
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // textures reused across bags
+  var sprTex = (function () {
+    var c = document.createElement('canvas'); c.width = c.height = 128; var g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+  })();
+  var blobTex = (function () {
+    var c = document.createElement('canvas'); c.width = c.height = 128; var g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.2)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+  })();
+  var bumpTex = (function () {
+    var c = document.createElement('canvas'); c.width = c.height = 256; var g = c.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256);
+    var seed = 7; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    for (var i = 0; i < 200; i++) {
+      var x = rnd() * 256, y = rnd() * 256, len = 20 + rnd() * 70, a = rnd() * Math.PI;
+      g.strokeStyle = rnd() > 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.13)'; g.lineWidth = 1 + rnd() * 3;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); g.stroke();
+    }
+    var t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 3); return t;
+  })();
+  for (var si = 0; si < 70; si++) {
+    var sm = new THREE.SpriteMaterial({ map: sprTex, transparent: true, opacity: 0, depthWrite: false });
+    var sp = new THREE.Sprite(sm); sp.visible = false; scene.add(sp);
+    sprites.push({ s: sp, age: 0, life: 0, vx: 0, vy: 0, vz: 0, sway: 0, active: false });
+  }
+
+  /* ---------- pouch geometry ---------- */
+  function depthFactor(yn) { return 1 - 0.94 * THREE.MathUtils.smoothstep(yn, 0.865, 1.0); }
+  function bulge(xn, yn) { return 1 + 0.2 * (1 - xn * xn) * Math.sin(Math.PI * Math.min(1, yn * 1.04)); }
+  function wrinkle(x, y, w, yn) {
+    var edge = 1 - Math.pow(Math.abs(x) / (w / 2), 4);
+    var soft = 0.004 * Math.sin(5.5 * x + 2.1 * y) + 0.0025 * Math.sin(9 * y - 3.2 * x + 1.3);
+    var pleat = 0.0016 * Math.sin(x * 34) * THREE.MathUtils.smoothstep(yn, 0.8, 0.9);
+    return soft * edge * (0.4 + 0.6 * Math.sin(Math.PI * Math.min(1, yn))) + pleat;
+  }
+  function disp(x, y, z, w, h, d) {
+    var yn = (y + h / 2) / h, xn = x / (w / 2), zn = z / (d / 2), zf = depthFactor(yn), nx = x, nz = z * zf;
+    if (Math.abs(Math.abs(z) - d / 2) < 1e-4) nz = z * zf * bulge(xn, yn) + Math.sign(z) * wrinkle(x, y, w, yn);
+    if (Math.abs(Math.abs(x) - w / 2) < 1e-4) { var fold = Math.min(1, yn * 2.4); nx = x - Math.sign(x) * 0.15 * w * (1 - zn * zn) * fold; }
+    return [nx, y, nz];
+  }
+  function surfZ(x, y, w, h, d) { var yn = (y + h / 2) / h, xn = x / (w / 2); return (d / 2) * depthFactor(yn) * bulge(xn, yn); }
+
+  /* ---------- label art (canvas) ---------- */
+  var CIN = "'Cinzel', Georgia, serif", COR = "'Cormorant Garamond', Georgia, serif", OUT = "'Outfit', system-ui, sans-serif";
+  function txt(g, s, x, y, o) {
+    g.font = o.font; g.fillStyle = o.color; g.textAlign = o.align || 'center'; g.textBaseline = o.base || 'alphabetic';
+    if ('letterSpacing' in g) g.letterSpacing = (o.ls || 0) + 'px'; g.fillText(s, x, y);
+  }
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function bgFill(g, W, H, D, key) {
+    var gr = g.createLinearGradient(0, 0, 0, H);
+    if (key === 'D') { gr.addColorStop(0, '#2B0A16'); gr.addColorStop(0.6, '#5E101C'); gr.addColorStop(1, '#8A1B33'); }
+    else { gr.addColorStop(0, D.bg[0]); gr.addColorStop(1, D.bg[1]); }
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    if (key === 'E') {
+      var seed = 5; var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (var i = 0; i < 2600; i++) {
+        var x = rnd() * W, y = rnd() * H, a = rnd() * Math.PI, l = 8 + rnd() * 26;
+        g.strokeStyle = rnd() > 0.5 ? 'rgba(255,240,210,0.09)' : 'rgba(60,30,10,0.08)'; g.lineWidth = 1 + rnd() * 1.5;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+      }
+    }
+    if (key === 'F') {
+      g.strokeStyle = 'rgba(242,181,165,0.13)'; g.lineWidth = 3; var s = 96;
+      for (var r = 0; r * s * 0.8 < H + s; r++) for (var c = -1; c * s < W + s; c++) {
+        var ox = c * s + (r % 2 ? s / 2 : 0), oy = r * s * 0.8;
+        g.beginPath(); g.moveTo(ox, oy + s * 0.7); g.lineTo(ox + s / 2, oy); g.lineTo(ox + s, oy + s * 0.7); g.stroke();
+      }
+    }
+  }
+  function crimp(g, W, H, light) {
+    var h = H * 0.065, gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, 'rgba(0,0,0,0.3)'); gr.addColorStop(1, 'rgba(0,0,0,0.05)'); g.fillStyle = gr; g.fillRect(0, 0, W, h);
+    g.strokeStyle = light ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.12)'; g.lineWidth = 3;
+    for (var x = 0; x < W; x += 12) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, h, W, 3);
+    g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, h + H * 0.055, W, 3);   // zip line
+  }
+  function bean(g, x, y, rx, ry, rot) {
+    g.save(); g.translate(x, y); g.rotate(rot);
+    var gr = g.createRadialGradient(-rx * 0.3, -ry * 0.4, 2, 0, 0, rx); gr.addColorStop(0, '#7A4424'); gr.addColorStop(1, '#3A1A0C');
+    g.fillStyle = gr; g.strokeStyle = '#1E0C05'; g.lineWidth = 2; g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.strokeStyle = '#140803'; g.lineWidth = 3.5; g.lineCap = 'round'; g.beginPath(); g.moveTo(-rx * 0.85, 0); g.quadraticCurveTo(0, -ry * 0.55, rx * 0.85, 0); g.stroke(); g.restore();
+  }
+  var VX = 0.80, VY = 0.155;
+  function valveMark(g, W, H, D) {
+    var x = VX * W, y = VY * H;
+    g.save(); g.strokeStyle = D.valveInk; g.lineWidth = 4; g.setLineDash([12, 10]); g.beginPath(); g.arc(x, y, 62, 0, Math.PI * 2); g.stroke(); g.restore();
+    txt(g, 'SQUEEZE', x, y + 100, { font: '600 22px ' + OUT, color: D.valveInk, ls: 4 });
+    txt(g, '& SMELL', x, y + 128, { font: '600 22px ' + OUT, color: D.valveInk, ls: 4 });
+  }
+
+  function drawFront(g, W, H, key, size) {
+    var D = DESIGNS[key], wl = SIZES[size].label;
+    bgFill(g, W, H, D, key);
+    if (key === 'A') {
+      txt(g, 'NAASH', W / 2, H * 0.205, { font: '700 150px ' + CIN, color: D.accent, ls: 4 });
+      txt(g, 'COFFEE', W / 2, H * 0.205 + 58, { font: '500 38px ' + CIN, color: D.fg, ls: 22 });
+      var cx = W / 2, cy = H * 0.5, R = 270;
+      g.strokeStyle = D.accent; g.lineWidth = 3;
+      [R, R * 0.65, R * 0.32].forEach(function (r) { g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke(); });
+      for (var i = 0; i < 8; i++) { var a = i * Math.PI / 4; g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.32, cy + Math.sin(a) * R * 0.32); g.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); g.stroke(); }
+      [[-Math.PI / 2, -Math.PI / 4, 0.85], [-Math.PI / 4, 0, 0.5], [Math.PI, Math.PI * 1.25, 0.35], [Math.PI / 4, Math.PI / 2, 0.6]].forEach(function (s) {
+        g.globalAlpha = s[2]; g.fillStyle = D.accent; g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, s[0], s[1]); g.closePath(); g.fill();
+      });
+      g.globalAlpha = 1; g.fillStyle = D.bg[1]; g.beginPath(); g.arc(cx, cy, R * 0.32, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = D.accent; g.beginPath(); g.arc(cx, cy, R * 0.32, 0, Math.PI * 2); g.stroke();
+      txt(g, 'AROMA', cx, cy + 9, { font: '500 28px ' + CIN, color: D.fg, ls: 4 });
+      txt(g, D.notes[0], W / 2, cy + R + 100, { font: '700 76px ' + COR, color: D.fg });
+      txt(g, D.notes[1], W / 2, cy + R + 178, { font: '700 76px ' + COR, color: D.fg });
+      txt(g, D.origin.toUpperCase() + ' · AA · ' + wl, W / 2, H - 70, { font: '500 30px ' + OUT, color: D.fg, ls: 8 });
+    } else if (key === 'B') {
+      g.strokeStyle = D.accent; g.globalAlpha = 0.5; g.lineWidth = 2.5;
+      for (var k = 0; k < 8; k++) { g.beginPath(); g.ellipse(W * 0.66, H * 0.52, 90 + k * 78, 130 + k * 108, 0.62 + k * 0.03, 0, Math.PI * 2); g.stroke(); }
+      g.globalAlpha = 1;
+      g.save(); g.translate(W * 0.2, H * 0.56); g.rotate(-Math.PI / 2); txt(g, 'NAASH', 0, 0, { font: '700 230px ' + CIN, color: D.accent, ls: 10, base: 'middle' }); g.restore();
+      txt(g, 'HIGHLAND', W * 0.4, H * 0.29, { font: '600 34px ' + OUT, color: D.fg, ls: 10, align: 'left' });
+      txt(g, 'ARABICA', W * 0.4, H * 0.29 + 46, { font: '600 34px ' + OUT, color: D.fg, ls: 10, align: 'left' });
+      [['FLORAL', 0.7], ['FRUITY', 0.9], ['SWEET', 0.55], ['NUTTY', 0.3]].forEach(function (r, i) {
+        var y = H * 0.42 + i * 96, bw = W * 0.5;
+        txt(g, r[0], W * 0.4, y, { font: '600 28px ' + OUT, color: D.fg, ls: 6, align: 'left' });
+        g.fillStyle = 'rgba(241,230,210,0.2)'; g.fillRect(W * 0.4, y + 16, bw, 12); g.fillStyle = D.accent; g.fillRect(W * 0.4, y + 16, bw * r[1], 12);
+      });
+      txt(g, 'Breathe in.', W * 0.4, H * 0.82, { font: 'italic 500 84px ' + COR, color: D.fg, align: 'left' });
+      txt(g, D.origin.toUpperCase() + ' · PB · ' + wl, W * 0.93, H - 70, { font: '500 28px ' + OUT, color: D.fg, ls: 8, align: 'right' });
+    } else if (key === 'C') {
+      txt(g, 'N', W * 0.62, H * 0.86, { font: '700 1050px ' + CIN, color: '#E3D3BA' });
+      txt(g, 'NAASH', 64, H * 0.13, { font: '700 58px ' + CIN, color: D.fg, ls: 14, align: 'left' });
+      txt(g, 'Smell', 64, H * 0.34, { font: '700 170px ' + COR, color: D.fg, align: 'left' });
+      txt(g, 'the', 64, H * 0.34 + 150, { font: '700 170px ' + COR, color: D.fg, align: 'left' });
+      txt(g, 'difference.', 64, H * 0.34 + 300, { font: 'italic 700 150px ' + COR, color: D.accent, align: 'left' });
+      var iy = H * 0.77; g.strokeStyle = D.fg; g.lineWidth = 4;
+      for (var n = 0; n < 4; n++) {
+        var ix = 100 + n * 104; g.beginPath(); g.arc(ix, iy, 40, 0, Math.PI * 2); g.stroke(); g.beginPath();
+        if (n === 0) { g.arc(ix, iy, 8, 0, 7); g.moveTo(ix + 26, iy); g.arc(ix + 18, iy, 8, 0, 7); g.moveTo(ix, iy + 26); g.arc(ix, iy + 18, 8, 0, 7); g.moveTo(ix - 10, iy); g.arc(ix - 18, iy, 8, 0, 7); g.moveTo(ix, iy - 10); g.arc(ix, iy - 18, 8, 0, 7); }
+        else if (n === 1) { g.arc(ix, iy, 22, 0, 7); g.moveTo(ix - 22, iy); g.lineTo(ix + 22, iy); g.moveTo(ix, iy - 22); g.lineTo(ix, iy + 22); }
+        else if (n === 2) { g.arc(ix - 10, iy + 6, 13, 0, 7); g.moveTo(ix + 23, iy + 6); g.arc(ix + 10, iy + 6, 13, 0, 7); g.moveTo(ix, iy - 8); g.quadraticCurveTo(ix + 2, iy - 24, ix + 16, iy - 24); }
+        else { g.ellipse(ix, iy, 14, 24, 0.5, 0, 7); g.moveTo(ix - 8, iy - 14); g.quadraticCurveTo(ix + 6, iy, ix + 8, iy + 14); }
+        g.stroke();
+      }
+      txt(g, D.origin.toUpperCase() + ' · AB · ' + wl, 64, H - 70, { font: '600 28px ' + OUT, color: D.fg, ls: 8, align: 'left' });
+      var px = VX * W, py = VY * H;
+      g.fillStyle = D.fg; g.beginPath(); g.arc(px, py, 78, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#F1E6D2'; g.lineWidth = 6; g.setLineDash([2, 12]); g.lineCap = 'round'; g.beginPath(); g.arc(px, py, 68, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      txt(g, 'SMELL', px, py - 2, { font: '600 26px ' + OUT, color: '#F1E6D2', ls: 4 });
+      txt(g, 'HERE', px, py + 30, { font: '600 26px ' + OUT, color: '#F1E6D2', ls: 4 });
+    } else if (key === 'D') {
+      g.strokeStyle = D.accent; g.lineCap = 'round'; g.lineWidth = 6;
+      [[0.18, 1], [0.5, 0.65], [0.82, 0.45]].forEach(function (c) {
+        g.globalAlpha = c[1] * 0.85; var x0 = W * c[0];
+        g.beginPath(); g.moveTo(x0, H * 0.97); g.bezierCurveTo(x0 - 90, H * 0.85, x0 + 90, H * 0.74, x0, H * 0.64); g.bezierCurveTo(x0 - 80, H * 0.56, x0 + 70, H * 0.5, x0 + 10, H * 0.42); g.stroke();
+      });
+      g.globalAlpha = 1;
+      txt(g, 'NAASH', W / 2, H * 0.215, { font: '700 86px ' + CIN, color: D.accent, ls: 4 });
+      txt(g, 'breathe in.', W / 2, H * 0.215 + 108, { font: 'italic 500 112px ' + COR, color: D.fg });
+      var wx = W / 2, wy = H * 0.5, wr = 136;
+      g.fillStyle = '#1A0610'; g.beginPath(); g.arc(wx, wy, wr, 0, Math.PI * 2); g.fill();
+      g.save(); g.beginPath(); g.arc(wx, wy, wr - 4, 0, Math.PI * 2); g.clip();
+      [[-60, -50, -0.3], [48, -62, 0.25], [-72, 36, 0.2], [30, 22, -0.2], [86, 70, 0.4], [-20, 92, 0.1], [-4, -2, 0.5]].forEach(function (b) { bean(g, wx + b[0], wy + b[1], 54, 36, b[2]); });
+      g.restore();
+      g.strokeStyle = D.accent; g.lineWidth = 7; g.beginPath(); g.arc(wx, wy, wr, 0, Math.PI * 2); g.stroke();
+      txt(g, 'AROMA WINDOW', wx, wy + wr + 54, { font: '600 24px ' + OUT, color: D.accent, ls: 6 });
+      txt(g, D.notes[0], W / 2, H * 0.8, { font: '700 66px ' + COR, color: D.fg });
+      txt(g, D.notes[1], W / 2, H * 0.8 + 70, { font: '700 66px ' + COR, color: D.fg });
+      txt(g, 'NAASH BLEND NO. 1 · ' + wl, W / 2, H - 70, { font: '500 28px ' + OUT, color: D.fg, ls: 8 });
+    } else if (key === 'E') {
+      var lx = W * 0.1, ly = H * 0.19, lw = W * 0.8, lh = H * 0.68, sc = lh / 840;
+      var Y = function (v) { return ly + v * sc; };
+      var lg = g.createLinearGradient(0, ly, 0, ly + lh); lg.addColorStop(0, '#5A0F1A'); lg.addColorStop(1, '#3A0810');
+      g.save(); g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = 18; g.shadowOffsetY = 6; rr(g, lx, ly, lw, lh, 36); g.fillStyle = lg; g.fill(); g.restore();
+      g.strokeStyle = '#E8B4A6'; g.lineWidth = 6; rr(g, lx, ly, lw, lh, 36); g.stroke();
+      var mx = W / 2 - 20, my = Y(120);
+      g.strokeStyle = '#E8B4A6'; g.lineWidth = 4; g.beginPath(); g.arc(mx, my, 76, 0, Math.PI * 2); g.stroke();
+      txt(g, 'N', mx, my + 36, { font: '700 112px ' + CIN, color: '#E8B4A6' });
+      g.fillStyle = '#3FA044'; g.beginPath(); g.moveTo(mx + 36, my - 44); g.bezierCurveTo(mx + 46, my - 90, mx + 84, my - 100, mx + 112, my - 96); g.bezierCurveTo(mx + 108, my - 60, mx + 80, my - 36, mx + 44, my - 40); g.fill();
+      bean(g, mx + 52, my + 36, 14, 20, 0.45);
+      txt(g, 'NAASH', W / 2, Y(300), { font: '700 118px ' + CIN, color: '#E8B4A6', ls: 3 });
+      txt(g, 'COFFEE', W / 2, Y(352), { font: '500 36px ' + CIN, color: '#F6E9DC', ls: 22 });
+      g.strokeStyle = '#E8B4A6'; g.lineWidth = 3; rr(g, W * 0.24, Y(392), W * 0.52, 150 * sc, 22); g.stroke();
+      txt(g, 'PREMIUM', W / 2, Y(430), { font: '500 24px ' + OUT, color: '#F6E9DC', ls: 10 });
+      txt(g, 'ARABICA', W / 2, Y(498), { font: '700 74px ' + CIN, color: '#E8B4A6' });
+      txt(g, 'COFFEE BEANS', W / 2, Y(534), { font: '500 22px ' + OUT, color: '#F6E9DC', ls: 8 });
+      var labs = [['100%', 'ARABICA'], ['PREMIUM', 'QUALITY'], ['FAST', 'DELIVERY'], ['TRUSTED', 'SERVICE']];
+      labs.forEach(function (l, i) {
+        var ix = lx + lw * (0.14 + i * 0.24), iy2 = Y(606);
+        g.strokeStyle = '#E8B4A6'; g.lineWidth = 3; g.beginPath(); g.arc(ix, iy2, 30, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = '#E8B4A6'; g.beginPath();
+        if (i === 0) { g.ellipse(ix, iy2, 9, 14, 0.45, 0, 7); } else if (i === 1) { for (var q = 0; q < 10; q++) { var ang = -Math.PI / 2 + q * Math.PI / 5, rad = q % 2 ? 7 : 17; g.lineTo(ix + Math.cos(ang) * rad, iy2 + Math.sin(ang) * rad); } g.closePath(); } else if (i === 2) { g.rect(ix - 17, iy2 - 10, 20, 16); g.rect(ix + 5, iy2 - 3, 12, 9); } else { g.moveTo(ix, iy2 - 16); g.lineTo(ix + 14, iy2 - 10); g.lineTo(ix + 12, iy2 + 6); g.lineTo(ix, iy2 + 17); g.lineTo(ix - 12, iy2 + 6); g.lineTo(ix - 14, iy2 - 10); g.closePath(); }
+        g.fill();
+        txt(g, l[0], ix, iy2 + 54, { font: '600 17px ' + OUT, color: '#F6E9DC', ls: 2 }); txt(g, l[1], ix, iy2 + 74, { font: '600 17px ' + OUT, color: '#F6E9DC', ls: 2 });
+      });
+      var by = Y(722);
+      g.fillStyle = '#2F8A34'; g.beginPath(); g.moveTo(W * 0.3, by + 20); g.bezierCurveTo(W * 0.34, by - 50, W * 0.44, by - 52, W * 0.5, by - 30); g.bezierCurveTo(W * 0.46, by + 6, W * 0.38, by + 22, W * 0.3, by + 20); g.fill();
+      g.fillStyle = '#3FA044'; g.beginPath(); g.moveTo(W * 0.48, by - 10); g.bezierCurveTo(W * 0.52, by - 76, W * 0.62, by - 70, W * 0.68, by - 44); g.bezierCurveTo(W * 0.64, by - 4, W * 0.56, by + 6, W * 0.48, by - 10); g.fill();
+      [[0.46, -14], [0.5, -22], [0.55, -12]].forEach(function (c) { g.fillStyle = '#C62828'; g.beginPath(); g.arc(W * c[0], by + c[1], 11, 0, 7); g.fill(); });
+      [[0.3, 36, -0.2], [0.38, 30, 0.1], [0.46, 28, -0.1], [0.54, 32, 0.25], [0.62, 36, -0.15], [0.7, 38, 0.1], [0.34, 62, 0.1], [0.43, 58, -0.12], [0.52, 62, 0.14], [0.61, 60, -0.1]].forEach(function (b) { bean(g, W * b[0], by + b[1], 34, 22, b[2]); });
+      txt(g, 'NET WEIGHT', W / 2, Y(796), { font: '500 17px ' + OUT, color: '#F6E9DC', ls: 6 });
+      txt(g, wl.replace(' ', ''), W / 2, Y(830), { font: '700 40px ' + CIN, color: '#E8B4A6' });
+    } else {
+      var bx = W / 2, by2 = H * 0.5;
+      g.fillStyle = '#3E0912'; g.beginPath(); g.arc(bx, by2, 235, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = D.accent; g.lineWidth = 6; g.beginPath(); g.arc(bx, by2, 235, 0, Math.PI * 2); g.stroke();
+      g.lineWidth = 2; g.beginPath(); g.arc(bx, by2, 218, 0, Math.PI * 2); g.stroke();
+      txt(g, 'N', bx, by2 - 8, { font: '700 200px ' + CIN, color: D.accent });
+      txt(g, 'NAASH', bx, by2 + 84, { font: '700 76px ' + CIN, color: D.fg, ls: 6 });
+      txt(g, 'COFFEE', bx, by2 + 132, { font: '500 26px ' + CIN, color: D.accent, ls: 18 });
+      txt(g, 'HIGHLAND ARABICA', W / 2, by2 + 330, { font: '600 32px ' + OUT, color: D.fg, ls: 10 });
+      txt(g, D.notes[0], W / 2, by2 + 410, { font: '700 62px ' + COR, color: D.fg });
+      txt(g, D.notes[1], W / 2, by2 + 474, { font: '700 62px ' + COR, color: D.fg });
+      txt(g, D.origin.toUpperCase() + ' · AA · ' + wl, W / 2, H - 70, { font: '500 28px ' + OUT, color: D.fg, ls: 8 });
+    }
+    if (key !== 'C') valveMark(g, W, H, D);
+    crimp(g, W, H, D.light);
+  }
+
+  function drawBack(g, W, H, key, size) {
+    var D = DESIGNS[key], wl = SIZES[size].label, m = 64; bgFill(g, W, H, D, key);
+    txt(g, 'ABOUT THIS COFFEE', m, H * 0.15, { font: '600 28px ' + OUT, color: D.accent, ls: 8, align: 'left' });
+    txt(g, D.origin, m, H * 0.15 + 100, { font: '700 100px ' + COR, color: D.fg, align: 'left' });
+    txt(g, D.grade, m, H * 0.15 + 160, { font: 'italic 500 48px ' + COR, color: D.fg, align: 'left' });
+    txt(g, '[One sentence about the farm or cooperative and the people who grew this lot.]', m, H * 0.15 + 230, { font: '400 28px ' + OUT, color: D.fg, align: 'left' });
+    var y0 = H * 0.15 + 290; g.strokeStyle = D.accent; g.lineWidth = 2; g.beginPath(); g.moveTo(m, y0); g.lineTo(W - m, y0); g.stroke();
+    D.rows.forEach(function (r, i) {
+      var y = y0 + 54 + i * 52;
+      txt(g, r[0].toUpperCase(), m, y, { font: '600 24px ' + OUT, color: D.accent, ls: 5, align: 'left' });
+      txt(g, r[1], W - m, y, { font: '500 28px ' + OUT, color: D.fg, align: 'right' });
+    });
+    var y1 = y0 + 54 + D.rows.length * 52 - 10; g.beginPath(); g.moveTo(m, y1); g.lineTo(W - m, y1); g.stroke();
+    txt(g, 'BREW GUIDE · STARTING POINTS', m, y1 + 70, { font: '600 26px ' + OUT, color: D.accent, ls: 6, align: 'left' });
+    txt(g, 'Pour-over   15 g coffee · 250 g water · 93 °C · about 3 min', m, y1 + 126, { font: '400 27px ' + OUT, color: D.fg, align: 'left' });
+    txt(g, 'Espresso   18 g in · 36 g out · about 28 s', m, y1 + 174, { font: '400 27px ' + OUT, color: D.fg, align: 'left' });
+    g.fillStyle = '#F4EFE6'; g.fillRect(W - m - 190, H - 200, 190, 120);
+    for (var i = 0; i < 28; i++) { g.fillStyle = '#1A1A1A'; g.fillRect(W - m - 178 + i * 6, H - 188, (i % 3 === 0) ? 4 : 2, 96); }
+    txt(g, 'Naash Coffee', m, H - 170, { font: '600 26px ' + OUT, color: D.fg, align: 'left' });
+    txt(g, '[Street], [City], Kenya', m, H - 132, { font: '400 24px ' + OUT, color: D.fg, align: 'left' });
+    txt(g, 'NET WT ' + wl, m, H - 94, { font: '400 24px ' + OUT, color: D.fg, align: 'left', ls: 3 });
+    crimp(g, W, H, D.light);
+  }
+  function drawSide(g, W, H, key, size) {
+    var D = DESIGNS[key], wl = SIZES[size].label; bgFill(g, W, H, D, key);
+    var fx = W / 2, fg = g.createLinearGradient(fx - 40, 0, fx + 40, 0);
+    fg.addColorStop(0, 'rgba(0,0,0,0)'); fg.addColorStop(0.5, 'rgba(0,0,0,0.28)'); fg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = fg; g.fillRect(fx - 40, 0, 80, H);
+    g.save(); g.translate(W * 0.28, H * 0.55); g.rotate(-Math.PI / 2); txt(g, 'Grown high. Roasted slow.', 0, 0, { font: 'italic 500 70px ' + COR, color: D.fg, base: 'middle' }); g.restore();
+    g.save(); g.translate(W * 0.74, H * 0.5); g.rotate(-Math.PI / 2); txt(g, 'NAASH', 0, 0, { font: '700 80px ' + CIN, color: D.accent, ls: 18, base: 'middle' }); g.restore();
+    g.strokeStyle = D.fg; g.lineWidth = 3; g.strokeRect(W * 0.28 - 70, H - 250, 140, 150);
+    txt(g, 'ROASTED ON', W * 0.28, H - 212, { font: '600 18px ' + OUT, color: D.fg, ls: 3 }); txt(g, '[DATE]', W * 0.28, H - 180, { font: '500 24px ' + OUT, color: D.fg });
+    txt(g, 'BEST BEFORE', W * 0.28, H - 144, { font: '600 18px ' + OUT, color: D.fg, ls: 3 }); txt(g, '[DATE]', W * 0.28, H - 116, { font: '500 24px ' + OUT, color: D.fg });
+    txt(g, wl, W * 0.74, H - 110, { font: '500 28px ' + OUT, color: D.accent, ls: 4 });
+    crimp(g, W, H, D.light);
+  }
+  function makeTex(wpx, hpx, fn, key, size) {
+    var c = document.createElement('canvas'); c.width = wpx; c.height = hpx; fn(c.getContext('2d'), wpx, hpx, key, size);
+    var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.needsUpdate = true; return t;
+  }
+  function labelTex(text) {
+    var c = document.createElement('canvas'); c.width = 512; c.height = 96; var g = c.getContext('2d');
+    g.font = '600 38px ' + OUT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(255,255,255,0.92)'; rr(g, 8, 8, 496, 80, 40); g.fill();
+    g.fillStyle = '#3A1A22'; if ('letterSpacing' in g) g.letterSpacing = '3px'; g.fillText(text, 256, 50);
+    var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+  }
+
+  /* ---------- bag record ---------- */
+  function makeBag(key, size) {
+    var S = dimsOf(size), D = DESIGNS[key], w = S.w, h = S.h, d = S.d;
+    var geo = new THREE.BoxGeometry(w, h, d, 64, 110, 24), pos = geo.attributes.position;
+    for (var i = 0; i < pos.count; i++) { var p = disp(pos.getX(i), pos.getY(i), pos.getZ(i), w, h, d); pos.setXYZ(i, p[0], p[1], p[2]); }
+    geo.computeVertexNormals();
+    var PX = 800, FH = Math.round(PX * h / w), SW = Math.round(PX * d / w);
+    var front = makeTex(PX, FH, drawFront, key, size), back = makeTex(PX, FH, drawBack, key, size), side = makeTex(SW, FH, drawSide, key, size);
+    function mat(map) {
+      return new THREE.MeshPhysicalMaterial({ map: map, roughness: D.gloss ? 0.5 : (D.light ? 0.72 : 0.62), metalness: 0, clearcoat: D.gloss ? 0.25 : 0.05, clearcoatRoughness: 0.5,
+        envMapIntensity: D.gloss ? 0.6 : 0.45 });
+    }
+    var cap = new THREE.MeshStandardMaterial({ color: new THREE.Color(D.bg[0]).multiplyScalar(0.8), roughness: 0.6 });
+    var mesh = new THREE.Mesh(geo, [mat(side), mat(side), cap, cap.clone(), mat(front), mat(back)]);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    var outer = new THREE.Group(), g = new THREE.Group(); outer.add(g); g.add(mesh);
+    var vx = (VX - 0.5) * w, vy = (0.5 - VY) * h, vz = surfZ(vx, vy, w, h, d);
+    var valve = new THREE.Group();
+    var ring = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.07, 0.012, 40), new THREE.MeshStandardMaterial({ color: 0xdcd8d0, roughness: 0.3, metalness: 0.05 }));
+    var cone = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.016, 32), new THREE.MeshStandardMaterial({ color: D.light ? 0x5e101c : 0x262122, roughness: 0.35 }));
+    var cap2 = new THREE.Mesh(new THREE.SphereGeometry(0.016, 16, 8), new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.3 }));
+    cone.position.y = 0.012; cap2.position.y = 0.022; cap2.scale.y = 0.5; valve.add(ring); valve.add(cone); valve.add(cap2);
+    valve.rotation.x = Math.PI / 2; valve.position.set(vx, vy, vz + 0.006); valve.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
+    g.add(valve);
+    var rec = { g: outer, inner: g, h: h, w: w, key: key, size: size, valvePos: new THREE.Vector3(vx, vy, vz + 0.07), sq: -1, puffed: false, hits: [ring, cone, cap2], blob: null, tag: null, delay: 0 };
+    ring.userData.rec = cone.userData.rec = cap2.userData.rec = rec;
+    var blob = new THREE.Mesh(new THREE.PlaneGeometry(w * 2.1, d * 3.2), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false }));
+    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.003; rec.blob = blob;
+    g.position.y = h / 2;
+    return rec;
+  }
+  function disposeRec(r) {
+    scene.remove(r.g); scene.remove(r.blob); if (r.tag) scene.remove(r.tag);
+    r.g.traverse(function (o) { if (o.geometry) o.geometry.dispose(); var ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach(function (m) { if (m.map) m.map.dispose(); m.dispose(); }); });
+    r.blob.geometry.dispose(); r.blob.material.dispose();
+    if (r.tag) { r.tag.material.map.dispose(); r.tag.material.dispose(); }
+  }
+
+  /* ---------- props: beans + cup ---------- */
+  function buildProps() {
+    props = new THREE.Group(); scene.add(props);
+    var bc = document.createElement('canvas'); bc.width = 256; bc.height = 128; var g = bc.getContext('2d');
+    var gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#6B3A1E'); gr.addColorStop(1, '#2E1509'); g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
+    g.strokeStyle = '#120703'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(0, 64); for (var x = 0; x <= 256; x += 16) g.lineTo(x, 64 + Math.sin(x / 40) * 8); g.stroke();
+    var bt = new THREE.CanvasTexture(bc); bt.encoding = THREE.sRGBEncoding;
+    var bgeo = new THREE.SphereGeometry(0.07, 24, 16), bmat = new THREE.MeshPhysicalMaterial({ map: bt, roughness: 0.38, clearcoat: 0.4, clearcoatRoughness: 0.4 });
+    var seed = 3; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    for (var i = 0; i < 46; i++) {
+      var m = new THREE.Mesh(bgeo, bmat); m.scale.set(1.0, 0.58, 0.72); m.castShadow = true; m.receiveShadow = true;
+      m.rotation.set(0, rnd() * 6.28, (rnd() - 0.5) * 0.5); m.userData.r = [rnd(), rnd(), rnd()]; m.position.y = 0.04; props.add(m); beanMeshes.push(m);
+    }
+    var cup = new THREE.Group();
+    var cmat = new THREE.MeshPhysicalMaterial({ color: 0x7a1730, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide });
+    var V = THREE.Vector2;
+    var cupG = new THREE.LatheGeometry([new V(0, 0.02), new V(0.2, 0.02), new V(0.24, 0.05), new V(0.36, 0.4), new V(0.38, 0.44), new V(0.355, 0.44), new V(0.34, 0.39), new V(0.2, 0.07), new V(0, 0.07)], 48);
+    var cupM = new THREE.Mesh(cupG, cmat); cupM.position.y = 0.04; cupM.castShadow = true; cupM.receiveShadow = true; cup.add(cupM);
+    var sau = new THREE.Mesh(new THREE.LatheGeometry([new V(0, 0), new V(0.3, 0), new V(0.58, 0.04), new V(0.62, 0.075), new V(0.58, 0.075), new V(0.3, 0.035), new V(0, 0.035)], 56), cmat);
+    sau.castShadow = true; sau.receiveShadow = true; cup.add(sau);
+    var cof = new THREE.Mesh(new THREE.CircleGeometry(0.335, 40), new THREE.MeshPhysicalMaterial({ color: 0x2a1409, roughness: 0.15, clearcoat: 1 }));
+    cof.rotation.x = -Math.PI / 2; cof.position.y = 0.4; cup.add(cof);
+    var hnd = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.03, 12, 24, Math.PI), cmat); hnd.rotation.z = -Math.PI / 2; hnd.position.set(0.42, 0.26, 0); hnd.castShadow = true; cup.add(hnd);
+    props.add(cup); props.userData.cup = cup;
+  }
+  function placeProps() {
+    var lineup = state.mode === 'lineup', cup = props.userData.cup;
+    cup.visible = !lineup;
+    if (!lineup) { var big = state.size === '1000'; cup.position.set(big ? 2.0 : 1.75, 0, 0.55); cup.rotation.y = -0.6; }
+    beanMeshes.forEach(function (m, i) {
+      var r = m.userData.r, ang, rad, x, z;
+      if (lineup) { x = (r[0] - 0.5) * 10.5; z = 1.1 + r[1] * 1.0; }
+      else { ang = Math.PI * (0.05 + r[0] * 0.95); rad = 1.0 + r[1] * 1.4; x = Math.cos(ang) * rad * -1; z = Math.abs(Math.sin(ang)) * rad * 0.7 + 0.25; if (x > 1.2 && z < 1.4) x -= 1.6; }
+      m.position.set(x, 0.04 + r[2] * 0.01, z);
+    });
+  }
+
+  /* ---------- scene composition ---------- */
+  function clearBags() { records.forEach(disposeRec); records = []; hits = []; }
+  function addRec(r, x, z, ry) {
+    r.g.position.x = x; r.g.position.z = z; r.g.rotation.y = ry; r.blob.position.x = x; r.blob.position.z = z; r.blob.rotation.z = -ry;
+    scene.add(r.g); scene.add(r.blob); records.push(r); r.hits.forEach(function (m) { hits.push(m); });
+  }
+  function rebuild() {
+    clearBags();
+    var lineup = state.mode === 'lineup';
+    if (lineup) {
+      ORDER.forEach(function (k, i) {
+        var r = makeBag(k, '250'), x = (i - 2.5) * 1.5;
+        addRec(r, x, -Math.abs(x) * 0.05, -x * 0.07);
+        var tg = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex((k + ' · ' + DESIGNS[k].name).toUpperCase()), transparent: true, depthWrite: false }));
+        tg.scale.set(1.3, 0.243, 1); tg.position.set(x, 0.14, 0.82 - Math.abs(x) * 0.05); scene.add(tg); r.tag = tg;
+      });
+    } else {
+      addRec(makeBag(state.design, state.size), 0, 0, 0);
+    }
+    placeProps(); updateInfo();
+    Array.prototype.forEach.call($('sizes').children, function (b) { b.disabled = lineup; });
+  }
+
+  /* ---------- camera ---------- */
+  function frameTarget() { if (state.mode === 'lineup') return new THREE.Vector3(0, 0.75, 0); return new THREE.Vector3(0, dimsOf(state.size).h * 0.48, 0); }
+  function goView(name, instant) {
+    var lineup = state.mode === 'lineup', dm = dimsOf(state.size);
+    var dist = lineup ? 10.6 : Math.max(4.4, dm.h * 3.3), y = lineup ? 1.7 : dm.h * 0.55, to, tgt = frameTarget();
+    if (name === 'front') to = new THREE.Vector3(0, y, dist); else if (name === 'back') to = new THREE.Vector3(0, y, -dist); else to = new THREE.Vector3(dist, y, 0);
+    if (instant) { camera.position.copy(to); controls.target.copy(tgt); controls.update(); return; }
+    tween = { from: camera.position.clone(), to: to, tf: controls.target.clone(), tt: tgt, t: 0 };
+  }
+  function focusBag(i) {
+    var r = records[i]; if (!r) return; var x = r.g.position.x;
+    tween = { from: camera.position.clone(), to: new THREE.Vector3(x, r.h * 0.8, 4.4), tf: controls.target.clone(), tt: new THREE.Vector3(x, r.h * 0.5, 0), t: 0 };
+  }
+
+  /* ---------- aroma ---------- */
+  function squeeze(r, delay) {
+    if (!r || r.sq !== -1) return;
+    r.puffed = false; $('status').textContent = 'Smell the beans…';
+    if (delay > 0) { r.sq = -2; r.delay = delay; } else r.sq = 0;
+  }
+  function spawnPuff(r) {
+    var wp = r.inner.localToWorld(r.valvePos.clone()), D = DESIGNS[r.key], col = new THREE.Color(D.light ? D.fg : D.accent), n = 0;
+    for (var i = 0; i < sprites.length && n < 16; i++) {
+      var s = sprites[i]; if (s.active) continue;
+      s.active = true; s.age = 0; s.life = 1.8 + Math.random() * 1.4; s.vx = (Math.random() - 0.3) * 0.12; s.vy = 0.22 + Math.random() * 0.2; s.vz = 0.1 + Math.random() * 0.12; s.sway = Math.random() * 6;
+      s.s.position.copy(wp).add(new THREE.Vector3((Math.random() - 0.5) * 0.06, (Math.random() - 0.5) * 0.04, 0)); s.s.material.color.copy(col); s.s.scale.setScalar(0.1); s.s.visible = true; n++;
+    }
+  }
+  function stepFx(dt) {
+    records.forEach(function (r) {
+      if (r.sq === -2) { r.delay -= dt; if (r.delay <= 0) r.sq = 0; return; }
+      if (r.sq >= 0) {
+        r.sq += dt / 0.9; var k = Math.sin(Math.PI * Math.min(1, r.sq)), sy = 1 - 0.035 * k;
+        r.inner.scale.set(1 + 0.05 * k, sy, 1 - 0.2 * k); r.inner.position.y = r.h / 2 * sy;
+        if (!r.puffed && r.sq > 0.3) { r.puffed = true; spawnPuff(r); }
+        if (r.sq >= 1) { r.sq = -1; r.inner.scale.set(1, 1, 1); r.inner.position.y = r.h / 2; $('status').textContent = 'Fresh coffee aroma'; setTimeout(statusText, 2500); }
+      }
+    });
+    sprites.forEach(function (s) {
+      if (!s.active) return; s.age += dt; var u = s.age / s.life;
+      if (u >= 1) { s.active = false; s.s.visible = false; return; }
+      s.s.position.x += (s.vx + Math.sin(s.age * 2.2 + s.sway) * 0.05) * dt; s.s.position.y += s.vy * dt; s.s.position.z += s.vz * dt;
+      s.s.scale.setScalar(0.1 + u * 0.55); s.s.material.opacity = Math.sin(Math.PI * u) * 0.55;
+    });
+    if (tween) {
+      tween.t = Math.min(1, tween.t + dt / 0.8); var e = tween.t < 0.5 ? 2 * tween.t * tween.t : 1 - Math.pow(-2 * tween.t + 2, 2) / 2;
+      camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.tf, tween.tt, e); if (tween.t >= 1) tween = null;
+    }
+  }
+  function statusText() { $('status').textContent = state.mode === 'lineup' ? 'All six designs · 250 G' : DESIGNS[state.design].name + ' · ' + SIZES[state.size].label; }
+
+  /* ---------- input ---------- */
+  var ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), downAt = null;
+  function pick(e) { var rc = renderer.domElement.getBoundingClientRect(); ndc.set(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1); ray.setFromCamera(ndc, camera); var h = ray.intersectObjects(hits, false); return h.length ? h[0].object.userData.rec : null; }
+  renderer.domElement.addEventListener('pointerdown', function (e) { downAt = { x: e.clientX, y: e.clientY }; });
+  renderer.domElement.addEventListener('pointerup', function (e) {
+    if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) { downAt = null; return; } downAt = null; var r = pick(e); if (r) squeeze(r, 0);
+  });
+  renderer.domElement.addEventListener('pointermove', function (e) { if (e.buttons) return; renderer.domElement.style.cursor = pick(e) ? 'pointer' : ''; });
+  function setAuto(on) { controls.autoRotate = on; $('auto').setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  controls.addEventListener('start', function () { tween = null; setAuto(false); });
+
+  designsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return; state.design = b.dataset.design; pressed(designsEl, b);
+    if (state.mode === 'lineup') { setAuto(false); focusBag(ORDER.indexOf(state.design)); updateInfo(); }
+    else { rebuild(); statusText(); }
+  });
+  $('sizes').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b || b.disabled) return; state.size = b.dataset.size; pressed($('sizes'), b); rebuild(); goView('front'); statusText(); });
+  $('modes').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return; state.mode = b.dataset.mode; pressed($('modes'), b);
+    rebuild(); setAuto(state.mode === 'single'); goView('front'); statusText();
+  });
+  document.querySelectorAll('[data-view]').forEach(function (b) { b.addEventListener('click', function () { setAuto(false); goView(b.dataset.view); }); });
+  $('auto').addEventListener('click', function () { setAuto(!controls.autoRotate); });
+  $('smell').addEventListener('click', function () { records.forEach(function (r, i) { squeeze(r, i * 0.18); }); });
+
+  /* ---------- loop ---------- */
+  function resize() {
+    var w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h;
+    camera.fov = camera.aspect < 1 ? Math.min(66, 32 / Math.max(camera.aspect, 0.45) * 0.92) : (camera.aspect < 1.5 && state.mode === 'lineup' ? 40 : 32); camera.updateProjectionMatrix();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize', resize);
+  var last = performance.now();
+  function frame(now) { var dt = Math.min(0.05, (now - last) / 1000); last = now; stepFx(dt); controls.update(); renderer.render(scene, camera); requestAnimationFrame(frame); }
+  function start() { resize(); buildProps(); rebuild(); goView('front', true); camera.position.x = 2.2; statusText(); requestAnimationFrame(frame); }
+  var started = false; function go() { if (started) return; started = true; start(); }
+  var fontLoads = ["700 40px Cinzel", "500 40px Cinzel", "700 40px 'Cormorant Garamond'", "italic 500 40px 'Cormorant Garamond'", "italic 700 40px 'Cormorant Garamond'", "400 20px Outfit", "500 20px Outfit", "600 20px Outfit"];
+  if (document.fonts && document.fonts.load) { Promise.all(fontLoads.map(function (f) { return document.fonts.load(f, 'NAASH Aa'); })).then(go, go); setTimeout(go, 2500); } else go();
+})();
+</script>
+</body>
+</html>
